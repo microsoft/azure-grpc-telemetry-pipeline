@@ -1,0 +1,48 @@
+{
+    "variables": {
+        "client_id": "{{env `ARM_CLIENT_ID`}}",
+        "client_secret": "{{env `ARM_CLIENT_SECRET`}}",
+        "subscription_id": "{{env `ARM_SUBSCRIPTION_ID`}}",
+        "tenant_id": "{{env `ARM_TENANT_ID`}}",
+        "resource_group_name": "{{env `PACKER_IMAGE_RESOURCE_GROUP`}}",
+        "location": "{{env `PACKER_IMAGE_LOCATION`}}",
+        "pipeline_download_url": "{{env `PACKER_PIPELINE_DOWNLOAD_URL`}}"
+    },
+    "sensitive-variables": ["client_secret"],
+    "builders": [
+        {
+            "type": "azure-arm",
+            "subscription_id": "{{user `subscription_id`}}",
+            "client_id": "{{user `client_id`}}",
+            "client_secret": "{{user `client_secret`}}",
+            "tenant_id": "{{user `tenant_id`}}",
+            "managed_image_resource_group_name": "{{user `resource_group_name`}}",
+            "managed_image_name": "pipeline-{{isotime | clean_image_name}}",
+            "os_type": "Linux",
+            "image_publisher": "RedHat",
+            "image_offer": "RHEL",
+            "image_sku": "7.3",
+            "azure_tags": {
+                "task": "Image deployment"
+            },
+            "location": "{{user `location`}}",
+            "vm_size": "Standard_DS2_v2",
+            "async_resourcegroup_delete": true
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "ansible",
+            "playbook_file": "../ansible/pipeline.playbook.yml",
+            "extra_arguments": ["--extra-vars", "pipeline_download_url={{user `pipeline_download_url`}}"]
+        },
+        {
+            "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'",
+            "inline": [
+              "/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync"
+            ],
+            "inline_shebang": "/bin/sh -x",
+            "type": "shell"
+        }
+    ]
+}

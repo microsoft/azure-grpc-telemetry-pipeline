@@ -1,0 +1,13 @@
+[Unit]
+Description=Systemd service to initialize visualization components.
+
+[Service]
+Type=simple
+StartLimitInterval=500
+StartLimitBurst=5
+RestartSec=60
+Restart=on-failure
+ExecStart=/bin/bash /etc/visualization/visualization.sh --config /var/lib/waagent/CustomData
+
+[Install]
+WantedBy=multi-user.target

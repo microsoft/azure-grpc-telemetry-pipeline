@@ -1,0 +1,68 @@
+- name: Pipeline tasks
+  hosts: all
+  become: true
+
+  vars:
+    pipeline_download_url: https://github.com/cisco-ie/pipeline-gnmi/raw/master/bin/pipeline
+
+  tasks:
+  - name: Create directory /etc/pipeline
+    file:
+      path: /etc/pipeline
+      state: directory
+
+  - name: Download cisco bigmuddy pipeline binary
+    get_url:
+      url: '{{pipeline_download_url}}'
+      dest: /etc/pipeline/pipeline
+      mode: 0755
+
+  - name: Copy cisco bigmuddy pipeline config file
+    copy:
+      src: ./pipeline.conf
+      dest: /etc/pipeline/pipeline.conf
+
+  - name: Import the Microsoft repository key.
+    rpm_key:
+      key: https://packages.microsoft.com/keys/microsoft.asc
+      state: present
+
+  - name: Create local azure-cli repository information.
+    yum_repository:
+      name: azure-cli
+      description: Microsoft Azure CLI
+      baseurl: https://packages.microsoft.com/yumrepos/azure-cli
+      gpgkey: https://packages.microsoft.com/keys/microsoft.asc
+      gpgcheck: yes
+
+  - name: Install azure cli
+    yum:
+      name: azure-cli
+      state: present
+
+  - name: Copy pipeline.sh
+    copy:
+      src: ./pipeline.sh
+      dest: /etc/pipeline/pipeline.sh
+  
+  - name: Copy pipeline.service
+    copy:
+      src: ./pipeline.service
+      dest: /lib/systemd/system/pipeline.service
+
+  - name: Enable pipeline port
+    firewalld:
+      port: 57500/tcp
+      permanent: yes
+      state: enabled
+      zone: public
+      immediate: yes
+
+  - name: Enable pipeline service
+    systemd:
+      name: pipeline
+      enabled: true
+      
+
+
+ 

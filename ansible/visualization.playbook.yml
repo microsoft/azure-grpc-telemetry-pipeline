@@ -1,0 +1,124 @@
+- name: Configure visualization stack
+  hosts: all
+  become: true
+
+  vars:
+    influx_download_url: https://dl.influxdata.com/influxdb/releases/influxdb-1.7.6.x86_64.rpm
+    grafana_download_url: https://dl.grafana.com/oss/release/grafana-6.1.6-1.x86_64.rpm
+    pipeline_download_url: https://github.com/cisco-ie/pipeline-gnmi/raw/master/bin/pipeline
+
+  tasks:
+
+  - name: Install InfluxDB
+    yum: 
+      name: "{{ influx_download_url }}"
+      state: present
+
+  - name: Enable InfluxDB
+    systemd:
+      name: influxdb
+      enabled: true
+      masked: false
+      state: started
+
+  - name: Copy Influx config
+    copy:
+      src: ./influxdb.conf
+      dest: /etc/influxdb/influxdb.conf
+
+  - name: Create telemetry database
+    shell: influx -execute 'create database telemetry'
+
+  - name: Install Grafana
+    yum:
+      name: "{{ grafana_download_url }}"
+      state: present
+
+  - name: Enable Grafana
+    systemd:
+      name: grafana-server
+      enabled: true
+      masked: false
+
+  - name: Copy Grafana config
+    copy:
+      src: ./grafana.ini
+      dest: /etc/grafana/grafana.ini
+
+  - name: Create self-signed cert for Grafana
+    shell: openssl req -newkey rsa:4096 -nodes -keyout /etc/grafana/grafana_key.pem -x509 -out /etc/grafana/grafana_cert.pem  -subj "/CN=grafana" 
+
+  - name: Allow Grafana to bind to privileged ports
+    shell: setcap 'cap_net_bind_service=+ep' /usr/sbin/grafana-server
+
+  - name: Enable HTTPS service
+    firewalld:
+      service: https
+      permanent: yes
+      state: enabled
+      zone: public
+      immediate: yes
+
+  - name: Create directory /etc/pipeline
+    file:
+      path: /etc/pipeline
+      state: directory
+
+  - name: Download cisco bigmuddy pipeline binary
+    get_url:
+      url: '{{pipeline_download_url}}'
+      dest: /etc/pipeline/pipeline
+      mode: 0755
+
+  - name: Copy cisco bigmuddy pipeline config file
+    copy:
+      src: ./pipeline-viz.conf
+      dest: /etc/pipeline/pipeline.conf
+
+  - name: Copy metrics.json
+    copy:
+      src: ./metrics.json
+      dest: /etc/pipeline/metrics.json
+
+  - name: Copy pipeline.pem
+    copy:
+      src: ./pipeline.pem
+      dest: /etc/pipeline/pipeline.pem
+
+  - name: Import the Microsoft repository key.
+    rpm_key:
+      key: https://packages.microsoft.com/keys/microsoft.asc
+      state: present
+
+  - name: Create local azure-cli repository information.
+    yum_repository:
+      name: azure-cli
+      description: Microsoft Azure CLI
+      baseurl: https://packages.microsoft.com/yumrepos/azure-cli
+      gpgkey: https://packages.microsoft.com/keys/microsoft.asc
+      gpgcheck: yes
+
+  - name: Install azure cli
+    yum:
+      name: azure-cli
+      state: present
+
+  - name: Create directory /etc/visualization
+    file:
+      path: /etc/visualization
+      state: directory
+
+  - name: Copy visualization.sh
+    copy:
+      src: ./visualization.sh
+      dest: /etc/visualization/visualization.sh
+
+  - name: Copy visualization.service
+    copy:
+      src: ./visualization.service
+      dest: /lib/systemd/system/visualization.service
+
+  - name: Enable visualization service
+    systemd:
+      name: visualization
+      enabled: true

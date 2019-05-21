@@ -1,0 +1,171 @@
+pool:
+  vmImage: ubuntu-16.04
+
+trigger:
+- master
+
+variables:
+  azureSubscription: network-telemetry
+  infraResourceGroup: $[coalesce(variables['infraResourceGroupOverride'], 'network-telemetry-infra')]
+  pipelineResourceGroup: $[coalesce(variables['pipelineResourceGroupOverride'], 'network-telemetry-pipeline')]
+  imageResourceGroup: $[coalesce(variables['imageResourceGroupOverride'], 'network-telemetry-images')]
+  location: $[coalesce(variables['locationOverride'], 'westus2')]
+  pipelineDownloadUrl: $[coalesce(variables['pipelineDownloadUrlOverride'], 'https://github.com/noelbundick/pipeline-gnmi/releases/download/custom-build-1/pipeline')]
+  influxDownloadUrl: $[coalesce(variables['influxDownloadUrlOverride'], 'https://dl.influxdata.com/influxdb/releases/influxdb-1.7.6.x86_64.rpm')]
+  grafanaDownloadUrl: $[coalesce(variables['grafanaDownloadUrlOverride'], 'https://dl.grafana.com/oss/release/grafana-6.1.6-1.x86_64.rpm')]
+  # Uncomment the following variables here, or set them in the Azure Pipelines UX
+  # tfBackendStorageAccount: mystorage
+  # tfBackendResourceGroup: terraform-backend
+  #####   Grafana Variables #####
+  # grafanaAADClientId: 11111111-1111-1111-1111-1111111111
+  # grafanaAADClientSecret: aaaabbbbccccdddd
+  # grafanaAADDirectoryId: 11111111-1111-1111-1111-1111111111
+  # grafanaRootUrl: "https://vm-12345.westus2.cloudapp.azure.com"
+
+  tfBackendKeyInfra: $[coalesce(variables['tfBackendKeyInfraOverride'], 'infra.terraform.tfstate')]
+  tfBackendKeyAzure: $[coalesce(variables['tfBackendKeyAzureOverride'], 'azure.terraform.tfstate')]
+
+steps:
+
+- bash: |
+    curl -LO https://releases.hashicorp.com/packer/1.4.0/packer_1.4.0_linux_amd64.zip
+    sudo unzip packer_1.4.0_linux_amd64.zip -d /usr/local/bin
+  displayName: Download Packer
+  condition: and(succeeded(), or(not(variables['PIPELINE_CUSTOM_IMAGE_ID']), not(variables['VISUALIZATION_CUSTOM_IMAGE_ID'])))
+
+- bash: |
+    sudo apt-get update
+    sudo apt-get install software-properties-common
+    sudo apt-add-repository --yes --update ppa:ansible/ansible
+    sudo apt-get install ansible
+  displayName: Update Ansible
+  condition: and(succeeded(), or(not(variables['PIPELINE_CUSTOM_IMAGE_ID']), not(variables['VISUALIZATION_CUSTOM_IMAGE_ID'])))
+
+- task: AzureCLI@1
+  displayName: Create resources needed for deployment
+  inputs:
+    azureSubscription: $(azureSubscription)
+    scriptLocation: inlineScript
+    inlineScript: |
+      set -euo pipefail
+      az group create -n $(tfBackendResourceGroup) -l $(location)
+      az group create -n $(imageResourceGroup) -l $(location)
+      az storage account create -g $(tfBackendResourceGroup) -n $(tfBackendStorageAccount) --sku Standard_LRS
+      az storage container create -n terraform --account-name $(tfBackendStorageAccount)
+
+- task: AzureCLI@1
+  displayName: Set variables
+  inputs:
+    azureSubscription: $(azureSubscription)
+    scriptLocation: inlineScript
+    addSpnToEnvironment: true
+    inlineScript: |
+      set -euo pipefail
+      SUB_ID=`az account show --query id -o tsv`
+      TENANT_ID=`az account show --query tenantId -o tsv`
+      
+      # Configure Terraform SP auth (https://www.terraform.io/docs/providers/azurerm/auth/service_principal_client_secret.html)
+      echo "##vso[task.setvariable variable=ARM_CLIENT_ID]$servicePrincipalId"
+      echo "##vso[task.setvariable variable=ARM_CLIENT_SECRET]$servicePrincipalKey"
+      echo "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$SUB_ID"
+      echo "##vso[task.setvariable variable=ARM_TENANT_ID]$TENANT_ID"
+
+- bash: |
+    set -euo pipefail
+    packer build pipeline.json | tee packer_pipeline.log
+    cp packer_pipeline.log $(Build.ArtifactStagingDirectory)
+    PIPELINE_CUSTOM_IMAGE_NAME=`grep ManagedImageName packer_pipeline.log | sed -n -e 's/^ManagedImageName: //p'`
+    PIPELINE_CUSTOM_IMAGE_ID="/subscriptions/$(ARM_SUBSCRIPTION_ID)/resourceGroups/$(imageResourceGroup)/providers/Microsoft.Compute/images/$PIPELINE_CUSTOM_IMAGE_NAME"
+    echo "##vso[task.setvariable variable=PIPELINE_CUSTOM_IMAGE_ID]$PIPELINE_CUSTOM_IMAGE_ID"
+  displayName: 'Packer: custom image for pipeline'
+  condition: and(succeeded(), not(variables['PIPELINE_CUSTOM_IMAGE_ID']))
+  workingDirectory: packer
+  env:
+    PACKER_IMAGE_RESOURCE_GROUP: $(imageResourceGroup)
+    PACKER_IMAGE_LOCATION: $(location)
+    PACKER_PIPELINE_DOWNLOAD_URL: $(pipelineDownloadUrl)
+
+- bash: |
+    set -euo pipefail
+    packer build visualization.json | tee packer_visualization.log
+    cp packer_visualization.log $(Build.ArtifactStagingDirectory)
+    VISUALIZATION_CUSTOM_IMAGE_NAME=`grep ManagedImageName packer_visualization.log | sed -n -e 's/^ManagedImageName: //p'`
+    VISUALIZATION_CUSTOM_IMAGE_ID="/subscriptions/$(ARM_SUBSCRIPTION_ID)/resourceGroups/$(imageResourceGroup)/providers/Microsoft.Compute/images/$VISUALIZATION_CUSTOM_IMAGE_NAME"
+    echo "##vso[task.setvariable variable=VISUALIZATION_CUSTOM_IMAGE_ID]$VISUALIZATION_CUSTOM_IMAGE_ID"
+  displayName: 'Packer: custom image for visualization'
+  condition: and(succeeded(), not(variables['VISUALIZATION_CUSTOM_IMAGE_ID']))
+  workingDirectory: packer
+  env:
+    PACKER_IMAGE_RESOURCE_GROUP: $(imageResourceGroup)
+    PACKER_IMAGE_LOCATION: $(location)
+    PACKER_INFLUX_DOWNLOAD_URL: $(influxDownloadUrl)
+    PACKER_GRAFANA_DOWNLOAD_URL: $(grafanaDownloadUrl)
+    PACKER_PIPELINE_DOWNLOAD_URL: $(pipelineDownloadUrl)
+
+- bash: |
+    set -euo pipefail
+    terraform init \
+      --backend-config='storage_account_name=$(tfBackendStorageAccount)' \
+      --backend-config='resource_group_name=$(tfBackendResourceGroup)' \
+      --backend-config='key=$(tfBackendKeyInfra)'
+    terraform apply \
+      -var 'infra_resource_group_name=$(infraResourceGroup)' \
+      -var 'grafana_aad_client_secret=$(grafanaAADClientSecret)' \
+      -auto-approve
+    
+    KEYVAULT_ID=`terraform output keyvault_id`
+    echo "##vso[task.setvariable variable=KEYVAULT_ID]$KEYVAULT_ID"
+    
+    PIPELINE_IDENTITY_ID=`terraform output pipeline_identity_id`
+    echo "##vso[task.setvariable variable=PIPELINE_IDENTITIES][\"$PIPELINE_IDENTITY_ID\"]"
+
+    VISUALIZATION_IDENTITY_ID=`terraform output visualization_identity_id`
+    echo "##vso[task.setvariable variable=VISUALIZATION_IDENTITIES][\"$VISUALIZATION_IDENTITY_ID\"]"
+    
+    VNET_ID=`terraform output vnet_id`
+    echo "##vso[task.setvariable variable=VNET_ID]$VNET_ID"
+
+    SANDBOX_SUBNET_ID=`terraform output sandbox_subnet_id`
+    echo "##vso[task.setvariable variable=SANDBOX_SUBNET_ID]$SANDBOX_SUBNET_ID"
+    echo "##vso[task.setvariable variable=SUBNET_IDS]\"[\\\"$SANDBOX_SUBNET_ID\\\"]\""
+
+    STORAGE_DIAG_LOGS_ID=`terraform output storage_diagnostics_logs_id`
+    echo "##vso[task.setvariable variable=STORAGE_DIAG_LOGS_ID]$STORAGE_DIAG_LOGS_ID"
+
+    GRAFANA_AAD_CLIENT_KV_SECRET_ID=`terraform output grafana_aad_client_secret_keyvault_secret_id`
+    echo "##vso[task.setvariable variable=GRAFANA_AAD_CLIENT_KV_SECRET_ID]$GRAFANA_AAD_CLIENT_KV_SECRET_ID"
+
+  displayName: 'Terraform: deploy infra'
+  workingDirectory: terraform/infra
+
+- bash: |
+    set -euo pipefail
+    terraform init \
+      --backend-config='storage_account_name=$(tfBackendStorageAccount)' \
+      --backend-config='resource_group_name=$(tfBackendResourceGroup)' \
+      --backend-config='key=$(tfBackendKeyAzure)'
+    terraform apply \
+      -var 'resource_group_name=$(pipelineResourceGroup)' \
+      -var 'location=$(location)' \
+      -var 'infra_diagnostic_log_storage_account_id=$(STORAGE_DIAG_LOGS_ID)' \
+      -var 'infra_sandbox_subnet_id=$(SANDBOX_SUBNET_ID)' \
+      -var 'event_hub_subnet_ids=$(SUBNET_IDS)' \
+      -var 'custom_image_resource_group_name=$(imageResourceGroup)' \
+      -var 'pipeline_custom_image_id=$(PIPELINE_CUSTOM_IMAGE_ID)' \
+      -var 'pipeline_user_identities=$(PIPELINE_IDENTITIES)' \
+      -var 'visualization_custom_image_id=$(VISUALIZATION_CUSTOM_IMAGE_ID)' \
+      -var 'visualization_user_identities=$(VISUALIZATION_IDENTITIES)' \
+      -var 'key_vault_id=$(KEYVAULT_ID)' \
+      -var 'grafana_aad_client_id=$(grafanaAADClientId)' \
+      -var 'grafana_aad_client_secret_keyvault_secret_id=$(GRAFANA_AAD_CLIENT_KV_SECRET_ID)' \
+      -var 'grafana_aad_directory_id=$(grafanaAADDirectoryId)' \
+      -var 'grafana_root_url=$(grafanaRootUrl)' \
+      -auto-approve
+  displayName: 'Terraform: deploy solution'
+  workingDirectory: terraform/azure
+
+- task: PublishBuildArtifacts@1
+  condition: always()
+  inputs:
+    pathToPublish: $(Build.ArtifactStagingDirectory)
+    artifactName: drop
