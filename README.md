@@ -17,6 +17,8 @@ Required tools:
 * [Packer](https://https://www.packer.io/)
 * [Terraform](https://www.terraform.io/)
 
+All deployment commands should be run in a Bash terminal
+
 ## Prerequisites
 
 The sample makes several assumptions regarding your existing on-premises and Azure infrastructure. These core resources are often managed by separate teams, so are left separate from the sample data pipeline.
@@ -72,24 +74,7 @@ packer build packer/visualization.json
 
 We use Terraform to deploy Azure resources
 
-First, create a file named `terraform.tfvars`, and fill it using the content from `sample.tfvars` and the values for your own environment. Here's an example of what a concrete config might look like:
-
-```ini
-resource_group_name = "network-telemetry-pipeline"
-location = "westus2"
-infra_sandbox_subnet_id = "/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourceGroups/network-telemetry-infra/providers/Microsoft.Network/virtualNetworks/my-vnet/sandbox"
-infra_diagnostic_log_storage_account_id = "/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourceGroups/network-telemetry-infra/providers/Microsoft.Storage/storageAccounts/networktelemetrylogs"
-event_hub_subnet_ids = "[\"/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourceGroups/network-telemetry-infra/providers/Microsoft.Network/virtualNetworks/my-vnet/subnets/sandbox\"]"
-pipeline_custom_image_id = "/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourceGroups/vm-images/providers/Microsoft.Compute/images/pipeline-2019-05-20T21-36-19Z"
-pipeline_user_identities = ["/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourcegroups/network-telemetry-infra/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pipeline_identity"]
-visualization_custom_image_id = "/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourceGroups/vm-images/providers/Microsoft.Compute/images/visualization-2019-05-20T21-43-27Z"
-visualization_user_identities = ["/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourcegroups/network-telemetry-infra/providers/Microsoft.ManagedIdentity/userAssignedIdentities/visualization_identity"]
-grafana_aad_client_id = "d0c05ba1-f246-41b6-8fb2-931446506d32"
-grafana_aad_client_secret_keyvault_secret_id="https://myvault.vault.azure.net/secrets/grafana/7fb2298f55194e289e26a65ea34fb2f3"
-grafana_aad_directory_id = "9750d6f0-3d23-4eb7-a93d-a73e69fc3f69"
-grafana_root_url = "https://vm-12345.westus2.cloudapp.azure.com"    # note: this DNS entry will need to point to your visualization VM
-key_vault_id = "/subscriptions/270bcfc0-0300-45e9-a214-eb41d7795a90/resourceGroups/network-telemetry-infra/providers/Microsoft.KeyVault/vaults/myvault"
-```
+Create a file named `terraform.tfvars`, and fill it using the content from [`terraform/azure/sample.tfvars`](terraform/azure/sample.tfvars) and the values for your own environment. `sample.tfvars` contains additional annotations for each required variable and where to find their values.
 
 Next, use Terraform to deploy into Azure:
 
