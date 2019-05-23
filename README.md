@@ -86,7 +86,7 @@ az group create -n $PACKER_IMAGE_RESOURCE_GROUP -l $PACKER_IMAGE_LOCATION
 
 # Build the pipeline VM image
 export PACKER_PIPELINE_DOWNLOAD_URL='https://github.com/cisco-ie/pipeline-gnmi/raw/master/bin/pipeline'
-packer build pipelne.json
+packer build pipeline.json
 
 # Build the visualization VM image
 export PACKER_PIPELINE_DOWNLOAD_URL='https://github.com/noelbundick/pipeline-gnmi/releases/download/custom-build-1/pipeline'
