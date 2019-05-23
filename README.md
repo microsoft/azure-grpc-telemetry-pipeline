@@ -57,11 +57,17 @@ az group create -n $TF_BACKEND_RG -l westus2
 az storage account create -g $TF_BACKEND_RG -n $TF_BACKEND_STORAGE --sku Standard_LRS
 az storage container create -n terraform --account-name $TF_BACKEND_STORAGE
 
-# Setting up Grafana with Azure Active Directory
+# GRAFANA_ROOT_URL should be a DNS name that will resolve to a visualization VM that is created later
+# This can be an actual DNS entry or a hostfile entry
+GRAFANA_ROOT_URL='https://vm-12345.westus2.cloudapp.azure.com'
+
+# Create an AAD Application for use with Grafana
+CLIENT_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 24 | head -n 1)
 az ad app create \
---display-name <display_name> \
---reply-urls <reply_urls> # separated by spaces if more than one
---password <client_secret_value> # must be at least 16 characters long, contain at least 1 special character, and contain at least 1 numeric character
+  --display-name grafana \
+  --reply-urls "https://$GRAFANA_ROOT_URL/login/generic_oauth" \
+  --key-type Password \
+  --password $CLIENT_SECRET
 
 # Deploy the development infrastructure
 cd terraform/infra
@@ -71,8 +77,8 @@ terraform init \
   --backend-config="key=infra.terraform.tfstate"
 
 terraform apply \
-  -var 'infra_resource_group_name=network-telemetry-infra' \
-  -var 'grafana_aad_client_secret=5554eb17-abf0-4c59-aac4-f4a7405ec53d'
+  -var "infra_resource_group_name=network-telemetry-infra" \
+  -var "grafana_aad_client_secret=$CLIENT_SECRET"
 ```
 
 
@@ -129,7 +135,7 @@ terraform apply
 
 > Note: all components are deployed inside a VNET and are inaccessible to the outside world. If you want to access your resources from the Internet, you'll need to make some changes. [Public access to VMs](#Public-access-to-VMs) has additional details.
 
-## Grafana configuration
+## Post-deployment configuration
 
 You'll need to perform a couple of quick steps to configure Grafana.
 
