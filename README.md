@@ -66,7 +66,7 @@ CLIENT_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 24 | head -n 1)
 az ad app create \
   --display-name grafana \
   --reply-urls "https://$GRAFANA_ROOT_URL/login/generic_oauth" \
-  --key-type Password
+  --key-type Password \
   --password $CLIENT_SECRET
 
 # Deploy the development infrastructure
@@ -135,7 +135,7 @@ terraform apply
 
 > Note: all components are deployed inside a VNET and are inaccessible to the outside world. If you want to access your resources from the Internet, you'll need to make some changes. [Public access to VMs](#Public-access-to-VMs) has additional details.
 
-## Grafana configuration
+## Post-deployment configuration
 
 You'll need to perform a couple of quick steps to configure Grafana.
 
