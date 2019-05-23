@@ -12,7 +12,7 @@ The sample utilizes widely-used OSS tools for deployments. Ansible is used to co
 
 Required tools w/ validated versions:
 
-* [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) `2.0.61`
+* [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) `2.0.65`
 * [Ansible](https://www.ansible.com/) `2.8.0`
 * [Packer](https://www.packer.io/) `1.4.1`
 * [Terraform](https://www.terraform.io/) `0.11.13`
@@ -55,6 +55,7 @@ TF_BACKEND_RG=terraform-backend
 TF_BACKEND_STORAGE=tfbackend
 az group create -n $TF_BACKEND_RG -l westus2
 az storage account create -g $TF_BACKEND_RG -n $TF_BACKEND_STORAGE --sku Standard_LRS
+az storage container create -n terraform --account-name $TF_BACKEND_STORAGE
 
 # Deploy the development infrastructure
 cd terraform/infra
