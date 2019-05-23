@@ -183,8 +183,7 @@ VM_NAME=viz-c7dd9e3cfc44
 # Add a public IP to a VM
 az network public-ip create -g $RESOURCE_GROUP --name publicip1 --allocation-method Static
 NIC_ID=$(az vm show -n $VM_NAME -g $RESOURCE_GROUP --query 'networkProfile.networkInterfaces[0].id' -o tsv)
-az network nic ip-config update -g 
-az network nic ip-config create -g $RESOURCE_GROUP --nic-name "${NIC_ID##*/}" --name public --public-ip-address publicip1
+az network nic ip-config update -g $RESOURCE_GROUP --nic-name "${NIC_ID##*/}" --name config1 --public-ip-address=publicip1
 
 # Add your SSH key to the VM
 az vm user update \
