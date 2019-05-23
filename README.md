@@ -178,6 +178,8 @@ For development or troubleshooting, it can be useful to expose VMs to the Intern
 
 ```shell
 RESOURCE_GROUP=network-telemetry-pipeline
+
+# You can find the name of your created VMs by visiting the Portal or by running `az vm list -g $RESOURCE_GROUP -o table`
 VM_NAME=viz-c7dd9e3cfc44
 
 # Add a public IP to a VM
