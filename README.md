@@ -57,6 +57,12 @@ az group create -n $TF_BACKEND_RG -l westus2
 az storage account create -g $TF_BACKEND_RG -n $TF_BACKEND_STORAGE --sku Standard_LRS
 az storage container create -n terraform --account-name $TF_BACKEND_STORAGE
 
+# Setting up Grafana with Azure Active Directory
+az ad app create \
+--display-name <display_name> \
+--reply-urls <reply_urls> # separated by spaces if more than one
+--password <client_secret_value> # must be at least 16 characters long, contain at least 1 special character, and contain at least 1 numeric character
+
 # Deploy the development infrastructure
 cd terraform/infra
 terraform init \
