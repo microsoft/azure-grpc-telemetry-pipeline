@@ -14,7 +14,7 @@ Required tools w/ validated versions:
 
 * [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) `2.0.61`
 * [Ansible](https://www.ansible.com/) `2.8.0`
-* [Packer](https://https://www.packer.io/) `1.4.1`
+* [Packer](https://www.packer.io/) `1.4.1`
 * [Terraform](https://www.terraform.io/) `0.11.13`
 
 All deployment commands should be run in a Bash terminal
